@@ -92,6 +92,17 @@
     border-radius:6px 6px 0 0; width:44px; height:18px; font-size:11px;
     align-items:center; justify-content:center; cursor:pointer; z-index:25;
   }
+  .footer-resizer{
+    display:none;
+    position:absolute; top:-11px; left:0; right:0; height:22px;
+    cursor:row-resize; touch-action:none; z-index:24;
+    align-items:center; justify-content:center;
+  }
+  .footer-resizer::before{
+    content:''; width:36px; height:4px; border-radius:2px;
+    background:var(--line);
+  }
+  .footer-resizer:active::before{ background:var(--accent); }
 
   /* ---------- MAIN ---------- */
   main{
@@ -241,11 +252,9 @@
     header .title{ gap:6px; min-width:0; overflow:hidden; flex:1 1 auto; }
     header h1{ font-size:10.5px; letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     header .subtitle{ display:none; }
-    header .legend{ gap:6px; font-size:0; flex:none; }
-    header .legend span{ display:none; }
-    header .legend label{ font-size:9px; gap:3px; white-space:nowrap; }
-    header .legend label input{ width:13px; height:13px; }
-    .task-swatch{ width:10px; }
+    header .legend{ gap:6px; flex:none; }
+    header .legend span{ font-size:9px; gap:3px; }
+    header .legend span i{ width:9px; height:2.5px; }
     .menu-toggle{ display:flex; width:28px; height:28px; font-size:14px; flex:none; }
     .btn-reset{ padding:5px 7px; font-size:9px; white-space:nowrap; flex:none; }
 
@@ -267,10 +276,10 @@
     footer{
       grid-template-columns: 1fr;
       grid-template-rows: auto 1fr;
-      height:62vh;
-      height:62dvh;
-      max-height:520px;
+      height:33vh;
+      height:33dvh;
     }
+    .footer-resizer{ display:flex; }
     #stats{ border-right:none; border-bottom:1px solid var(--line); padding:6px 10px; overflow-y:auto; gap:5px; }
     #stats .name{ font-size:10.5px; }
     .stat-grid{ grid-template-columns: repeat(3, 1fr); gap:5px; }
@@ -297,12 +306,8 @@
     </div>
     <div class="legend">
       <span><i style="background:var(--hike)"></i>Hike</span>
-      <span><i style="background:var(--flight)"></i>Paraglide flight</span>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-        <input type="checkbox" id="taskToggle" checked style="accent-color:var(--accent);">
-        <i class="task-swatch"></i>
-        Official task
-      </label>
+      <span><i style="background:var(--flight)"></i>Flight</span>
+      <span class="task-legend"><i class="task-swatch"></i>Task</span>
     </div>
     <button class="btn-reset" id="resetBtn">Full route</button>
   </header>
@@ -314,6 +319,7 @@
   </main>
 
   <footer id="footerPanel">
+    <div class="footer-resizer" id="footerResizer"></div>
     <button class="footer-collapse" id="footerCollapse" aria-label="Toggle elevation panel">▾</button>
     <div id="stats"></div>
     <div id="chartWrap">
@@ -407,13 +413,6 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
     });
   }
   taskLayer.addTo(map);
-  const taskToggle = document.getElementById('taskToggle');
-  if (taskToggle){
-    taskToggle.addEventListener('change', () => {
-      if (taskToggle.checked) taskLayer.addTo(map);
-      else map.removeLayer(taskLayer);
-    });
-  }
 
   // start / camp markers: end of last hike each day
   const dayOrder = [];
@@ -800,6 +799,53 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
   });
 
   window.addEventListener('resize', () => map.invalidateSize());
+
+  // ---------- Mobile: draggable resizer between map and elevation panel ----------
+  const footerResizer = document.getElementById('footerResizer');
+  const appEl = document.getElementById('app');
+  let footerFraction = 0.33; // default 33% elevation / 66% map
+  let dragging = false;
+  let dragStartY = 0;
+  let dragStartHeight = 0;
+
+  function availableHeight(){
+    const headerH = document.querySelector('header').offsetHeight;
+    return appEl.clientHeight - headerH;
+  }
+  function applyFooterHeight(){
+    if (window.innerWidth > 768) return;
+    const avail = availableHeight();
+    footerPanel.style.height = Math.round(avail * footerFraction) + 'px';
+    map.invalidateSize();
+  }
+
+  footerResizer.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    dragStartY = e.clientY;
+    dragStartHeight = footerPanel.getBoundingClientRect().height;
+    footerPanel.classList.remove('collapsed');
+    footerResizer.setPointerCapture(e.pointerId);
+  });
+  footerResizer.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const dy = e.clientY - dragStartY;
+    const avail = availableHeight();
+    let newHeight = dragStartHeight - dy; // drag up = taller panel, drag down = shorter panel
+    const minH = avail * 0.12;
+    const maxH = avail * 0.85;
+    newHeight = Math.max(minH, Math.min(maxH, newHeight));
+    footerFraction = newHeight / avail;
+    footerPanel.style.height = Math.round(newHeight) + 'px';
+    map.invalidateSize();
+  });
+  const endDrag = () => { dragging = false; };
+  footerResizer.addEventListener('pointerup', endDrag);
+  footerResizer.addEventListener('pointercancel', endDrag);
+
+  if (window.innerWidth <= 768){
+    applyFooterHeight();
+    window.addEventListener('resize', applyFooterHeight);
+  }
 
   const totalDistAll = TRACKS.reduce((s,t)=>s+t.stats.distance_km,0);
   let summaryText = `${dayOrder.length} days · ${totalDistAll.toFixed(0)} km · ${TRACKS.filter(t=>t.type==='hiking').length} hikes · ${TRACKS.filter(t=>t.type!=='hiking').length} flights`;
