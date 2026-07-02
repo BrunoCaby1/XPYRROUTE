@@ -257,7 +257,9 @@
   /* ---------- LIGHTBOX ---------- */
   #lightbox{
     display:none;
-    position:fixed; inset:0; background:rgba(6,8,7,.96);
+    position:fixed; inset:0; background:rgba(6,8,7,.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     z-index:5000;
     align-items:center; justify-content:center;
     flex-direction:column;
@@ -1036,8 +1038,8 @@ const MEDIA_CONFIG = {
       lbMediaWrap.appendChild(el);
     }
     lbCaption.innerHTML = `<div>${item.label}</div><div class="coords">${item.lat.toFixed(5)}, ${item.lon.toFixed(5)} · ${lbIndex+1} / ${mediaItems.length}</div>`;
-    // pan map to this item's location
-    map.panTo([item.lat, item.lon]);
+    // fly the map to this item's location so movement is clearly visible behind the lightbox
+    map.flyTo([item.lat, item.lon], Math.max(map.getZoom(), 13), { duration: 0.6 });
   }
   function lbStep(delta){
     if (!mediaItems.length) return;
