@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#101614">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>X-Pyr Route — Interactive Map</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" />
@@ -26,7 +30,8 @@
   }
   *{box-sizing:border-box;}
   html,body{
-    margin:0; padding:0; height:100%;
+    margin:0; padding:0;
+    height:100vh; height:100dvh;
     background:var(--ink); color:var(--paper);
     font-family:var(--sans);
     overflow:hidden;
@@ -34,13 +39,14 @@
   #app{
     display:grid;
     grid-template-rows:auto 1fr auto;
-    height:100vh;
+    height:100vh; height:100dvh;
   }
 
   /* ---------- HEADER ---------- */
   header{
     display:flex; align-items:center; justify-content:space-between;
     padding:10px 18px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
     background:var(--panel);
     border-bottom:1px solid var(--line);
     z-index:20;
@@ -143,6 +149,7 @@
     min-height:0;
     position:relative;
     transition: height .2s ease;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   #stats{
     padding:12px 16px;
@@ -220,7 +227,10 @@
   }
   .camp-label::before{ display:none; }
 
-  footer.collapsed{ height:22px !important; border-top-color:var(--line); }
+  footer.collapsed{
+    height: calc(22px + env(safe-area-inset-bottom, 0px)) !important;
+    border-top-color:var(--line);
+  }
   footer.collapsed #stats,
   footer.collapsed #chartWrap{ display:none; }
   footer.collapsed .footer-collapse{ transform:translateX(-50%) rotate(180deg); }
@@ -254,12 +264,13 @@
     footer{
       grid-template-columns: 1fr;
       grid-template-rows: auto 1fr;
-      height:38vh;
-      max-height:320px;
+      height:40vh;
+      height:40dvh;
+      max-height:340px;
     }
-    #stats{ border-right:none; border-bottom:1px solid var(--line); padding:10px 12px; }
+    #stats{ border-right:none; border-bottom:1px solid var(--line); padding:10px 12px; overflow-y:auto; }
     .stat-grid{ grid-template-columns: repeat(2, 1fr); }
-    #chartWrap{ padding:8px 10px 4px; }
+    #chartWrap{ padding:8px 10px 4px; overflow:auto; min-height:0; }
     .footer-collapse{ display:flex; }
     .chart-toolbar{ top:2px; right:8px; }
     .chart-toolbar-label{ display:none; }
