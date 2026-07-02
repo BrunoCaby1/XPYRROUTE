@@ -69,6 +69,23 @@
     cursor:pointer; letter-spacing:.03em;
   }
   .btn-reset:hover{border-color:var(--accent); color:var(--accent);}
+  .menu-toggle{
+    display:none;
+    background:var(--panel-2); color:var(--paper); border:1px solid var(--line);
+    border-radius:6px; width:34px; height:34px; font-size:16px;
+    cursor:pointer; align-items:center; justify-content:center; flex:none;
+  }
+  #sidebarBackdrop{
+    display:none;
+    position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:999;
+  }
+  .footer-collapse{
+    display:none;
+    position:absolute; top:-1px; left:50%; transform:translateX(-50%);
+    background:var(--panel-2); color:var(--paper-dim); border:1px solid var(--line); border-bottom:none;
+    border-radius:6px 6px 0 0; width:44px; height:18px; font-size:11px;
+    align-items:center; justify-content:center; cursor:pointer; z-index:25;
+  }
 
   /* ---------- MAIN ---------- */
   main{
@@ -124,6 +141,8 @@
     height:210px;
     z-index:20;
     min-height:0;
+    position:relative;
+    transition: height .2s ease;
   }
   #stats{
     padding:12px 16px;
@@ -166,6 +185,22 @@
   }
   #chartWrap{ position:relative; padding:10px 16px 6px; min-width:0; overflow:hidden; }
   #chartWrap canvas{ width:100% !important; height:100% !important; }
+  .chart-toolbar{
+    position:absolute; top:6px; right:16px; z-index:5;
+    display:flex; align-items:center; gap:6px;
+  }
+  .chart-toolbar-label{
+    font-family:var(--mono); font-size:9.5px; color:var(--paper-dim);
+    text-transform:uppercase; letter-spacing:.03em;
+  }
+  .unit-btn{
+    font-family:var(--mono); font-size:10px;
+    background:var(--panel-2); color:var(--paper-dim);
+    border:1px solid var(--line); border-radius:4px;
+    padding:2px 8px; cursor:pointer;
+  }
+  .unit-btn.active{ background:#4fb3d9; color:#0c1110; border-color:#4fb3d9; font-weight:700; }
+  .unit-btn:hover:not(.active){ border-color:#4fb3d9; color:#4fb3d9; }
 
   /* leaflet tweaks */
   .leaflet-control-attribution{ font-size:9px; }
@@ -184,6 +219,51 @@
     box-shadow:0 1px 4px rgba(0,0,0,.4);
   }
   .camp-label::before{ display:none; }
+
+  footer.collapsed{ height:0 !important; overflow:hidden; border-top-color:transparent; }
+  footer.collapsed .footer-collapse{ transform:translateX(-50%) rotate(180deg); }
+
+  /* ---------- MOBILE ---------- */
+  @media (max-width: 768px){
+    header{ padding:8px 10px; gap:8px; flex-wrap:wrap; }
+    header h1{ font-size:12px; }
+    header .subtitle{ display:none; }
+    header .legend{ gap:8px; font-size:0; }
+    header .legend span{ display:none; }
+    header .legend label{ font-size:10px; gap:4px; }
+    .btn-reset{ padding:6px 8px; font-size:10px; }
+    .menu-toggle{ display:flex; }
+
+    main{ display:block; position:relative; overflow:hidden; }
+    #map{ position:absolute; inset:0; }
+
+    #sidebar{
+      position:fixed; top:0; bottom:0; left:0;
+      width:82%; max-width:300px;
+      transform:translateX(-100%);
+      transition:transform .25s ease;
+      z-index:1000;
+      box-shadow:2px 0 16px rgba(0,0,0,.6);
+      padding-top:54px;
+    }
+    #sidebar.open{ transform:translateX(0); }
+    #sidebarBackdrop.show{ display:block; }
+
+    footer{
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      height:38vh;
+      max-height:320px;
+    }
+    #stats{ border-right:none; border-bottom:1px solid var(--line); padding:10px 12px; }
+    .stat-grid{ grid-template-columns: repeat(2, 1fr); }
+    #chartWrap{ padding:8px 10px 4px; }
+    .footer-collapse{ display:flex; }
+    .chart-toolbar{ top:2px; right:8px; }
+    .chart-toolbar-label{ display:none; }
+
+    .day-head, .seg-btn{ padding-top:9px; padding-bottom:9px; }
+  }
 </style>
 </head>
 <body>
@@ -191,6 +271,7 @@
 <div id="app">
   <header>
     <div class="title">
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
       <h1>X-Pyr Route</h1>
       <span class="subtitle" id="tripSummary">loading…</span>
     </div>
@@ -207,13 +288,22 @@
   </header>
 
   <main>
+    <div id="sidebarBackdrop"></div>
     <div id="sidebar"></div>
     <div id="map"></div>
   </main>
 
-  <footer>
+  <footer id="footerPanel">
+    <button class="footer-collapse" id="footerCollapse" aria-label="Toggle elevation panel">▾</button>
     <div id="stats"></div>
-    <div id="chartWrap"><canvas id="elevChart"></canvas></div>
+    <div id="chartWrap">
+      <div class="chart-toolbar">
+        <span class="chart-toolbar-label">vertical speed:</span>
+        <button class="unit-btn active" data-unit="ms">m/s</button>
+        <button class="unit-btn" data-unit="mh">m/h</button>
+      </div>
+      <canvas id="elevChart"></canvas>
+    </div>
   </footer>
 </div>
 
@@ -425,11 +515,16 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
     return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }
 
+  let vSpeedUnit = 'ms'; // 'ms' or 'mh'
+  let lastChartTracks = null;
+
   function renderChartForTracks(tracks, highlightIdx){
+    lastChartTracks = tracks;
     // concatenate distance across tracks (for multi-track / day / full view)
     let offset = 0;
     const labels = [];
     const dataPoints = [];
+    const vSpeedRaw = []; // always m/s, converted at render time
     const pointMeta = []; // {idx, lat, lon, type, tOffset, vSpeed, hSpeed}
 
     tracks.forEach(({t, idx}) => {
@@ -446,29 +541,58 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
           const dEle = p[2] - t.pts[i-1][2];
           const dDistKm = cum[i] - cum[i-1];
           if (dt > 0){
-            vSpeed = dEle / dt; // m/s always, convert on display
-            hSpeed = (dDistKm*1000) / dt; // m/s, convert on display
+            vSpeed = dEle / dt; // m/s
+            hSpeed = (dDistKm*1000) / dt; // m/s
           }
         }
+        vSpeedRaw.push(vSpeed);
         pointMeta.push({ idx, lat:p[0], lon:p[1], type: t.type, tOffset: tOff, vSpeed, hSpeed });
       });
       offset += cum[cum.length-1];
     });
+
+    const unitFactor = vSpeedUnit === 'mh' ? 3600 : 1;
+    const unitLabel = vSpeedUnit === 'mh' ? 'm/h' : 'm/s';
+    const vSpeedPoints = vSpeedRaw.map(v => v == null ? null : v * unitFactor);
+
+    // push the speed line into the lower portion of the plot area, separated visually from elevation
+    const validSpeeds = vSpeedPoints.filter(v => v != null);
+    const maxAbs = validSpeeds.length ? Math.max(...validSpeeds.map(Math.abs), 0.01) : 1;
+    const y1Min = -maxAbs * 1.15;
+    const y1Max = maxAbs * 4;
 
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
       type: 'line',
       data: {
         labels,
-        datasets: [{
-          data: dataPoints,
-          borderColor: '#f2a341',
-          backgroundColor: 'rgba(242,163,65,0.15)',
-          fill: true,
-          pointRadius: 0,
-          borderWidth: 1.5,
-          tension: 0.15
-        }]
+        datasets: [
+          {
+            label: 'elevation (m)',
+            data: dataPoints,
+            borderColor: '#f2a341',
+            backgroundColor: 'rgba(242,163,65,0.15)',
+            fill: true,
+            pointRadius: 0,
+            borderWidth: 1.5,
+            tension: 0.15,
+            yAxisID: 'y',
+            order: 2
+          },
+          {
+            label: `vertical speed (${unitLabel})`,
+            data: vSpeedPoints,
+            borderColor: '#4fb3d9',
+            backgroundColor: 'transparent',
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 1,
+            tension: 0.1,
+            spanGaps: false,
+            yAxisID: 'y1',
+            order: 1
+          }
+        ]
       },
       options: {
         responsive: true,
@@ -476,23 +600,31 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
         animation: false,
         interaction: { mode:'index', intersect:false },
         plugins: {
-          legend: { display:false },
+          legend: {
+            display:true,
+            labels: {
+              color:'#9fb0aa', boxWidth:12, boxHeight:2,
+              font:{ family:'monospace', size:9.5 },
+              padding:8
+            }
+          },
           tooltip: {
             callbacks: {
               title: (items) => `${items[0].label} km`,
-              label: (item) => `elevation: ${item.formattedValue} m`,
+              label: (item) => {
+                if (item.dataset.yAxisID === 'y1') return `vertical speed: ${item.formattedValue} ${unitLabel}`;
+                return `elevation: ${item.formattedValue} m`;
+              },
               afterLabel: (item) => {
+                if (item.dataset.yAxisID === 'y1') return '';
                 const meta = pointMeta[item.dataIndex];
                 if (!meta) return '';
                 const isHiking = meta.type === 'hiking';
                 const lines = [];
                 lines.push(`${isHiking ? 'hike' : 'flight'} time: ${fmtElapsed(meta.tOffset)}`);
-                if (meta.vSpeed == null || meta.hSpeed == null){
-                  lines.push('vertical: —');
+                if (meta.hSpeed == null){
                   lines.push('horizontal: —');
                 } else if (isHiking){
-                  const vMh = meta.vSpeed * 3600; // m/hour
-                  lines.push(`vertical: ${vMh>=0?'+':''}${Math.round(vMh)} m/h`);
                   if (meta.hSpeed > 0){
                     const paceMinPerKm = (1000/meta.hSpeed) / 60; // min per km
                     const pm = Math.floor(paceMinPerKm);
@@ -502,7 +634,6 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
                     lines.push('horizontal: —');
                   }
                 } else {
-                  lines.push(`vertical: ${meta.vSpeed>=0?'+':''}${meta.vSpeed.toFixed(1)} m/s`);
                   lines.push(`horizontal: ${(meta.hSpeed*3.6).toFixed(1)} km/h`);
                 }
                 return lines;
@@ -517,9 +648,21 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
             title: { display:true, text:'distance (km)', color:'#9fb0aa', font:{ family:'monospace', size:10 } }
           },
           y: {
+            position: 'left',
             ticks: { color:'#9fb0aa', font:{ family:'monospace', size:10 } },
             grid: { color:'#2a3532' },
             title: { display:true, text:'elevation (m)', color:'#9fb0aa', font:{ family:'monospace', size:10 } }
+          },
+          y1: {
+            position: 'right',
+            min: y1Min,
+            max: y1Max,
+            ticks: {
+              color:'#4fb3d9', font:{ family:'monospace', size:9 },
+              maxTicksLimit: 4
+            },
+            grid: { display:false },
+            title: { display:true, text:`vertical speed (${unitLabel})`, color:'#4fb3d9', font:{ family:'monospace', size:10 } }
           }
         },
         onHover: (evt, elements, c) => {
@@ -534,6 +677,14 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
       }
     });
   }
+
+  document.querySelectorAll('.unit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      vSpeedUnit = btn.dataset.unit;
+      document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b === btn));
+      if (lastChartTracks) renderChartForTracks(lastChartTracks);
+    });
+  });
 
   function highlightLayers(activeIdxs){
     trackLayers.forEach(({track, layer}, idx) => {
@@ -591,6 +742,41 @@ const TASK = {"taskType":"CLASSIC","version":1,"turnpoints":[{"radius":"1000","t
   }
 
   document.getElementById('resetBtn').addEventListener('click', showFullRoute);
+
+  // ---------- Mobile: sidebar drawer ----------
+  const sidebarEl = document.getElementById('sidebar');
+  const backdropEl = document.getElementById('sidebarBackdrop');
+  const menuToggle = document.getElementById('menuToggle');
+
+  function closeSidebar(){
+    sidebarEl.classList.remove('open');
+    backdropEl.classList.remove('show');
+  }
+  function openSidebar(){
+    sidebarEl.classList.add('open');
+    backdropEl.classList.add('show');
+  }
+  menuToggle.addEventListener('click', () => {
+    sidebarEl.classList.contains('open') ? closeSidebar() : openSidebar();
+  });
+  backdropEl.addEventListener('click', closeSidebar);
+
+  // auto-close drawer after picking a segment/day on mobile
+  sidebarEl.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768 && (e.target.closest('.seg-btn') || e.target.closest('.day-head'))){
+      setTimeout(closeSidebar, 150);
+    }
+  });
+
+  // ---------- Mobile: collapsible elevation panel ----------
+  const footerPanel = document.getElementById('footerPanel');
+  const footerCollapse = document.getElementById('footerCollapse');
+  footerCollapse.addEventListener('click', () => {
+    footerPanel.classList.toggle('collapsed');
+    setTimeout(() => map.invalidateSize(), 220);
+  });
+
+  window.addEventListener('resize', () => map.invalidateSize());
 
   const totalDistAll = TRACKS.reduce((s,t)=>s+t.stats.distance_km,0);
   let summaryText = `${dayOrder.length} days · ${totalDistAll.toFixed(0)} km · ${TRACKS.filter(t=>t.type==='hiking').length} hikes · ${TRACKS.filter(t=>t.type!=='hiking').length} flights`;
