@@ -262,7 +262,7 @@
   /* ---------- PLAYBACK BAR ---------- */
   #playbackBar{
     position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
-    z-index:15;
+    z-index:1200;
     display:flex; align-items:center; gap:10px;
     background:rgba(20,27,25,.92);
     border:1px solid var(--line);
@@ -284,6 +284,25 @@
   #playSlider{
     flex:1; min-width:0; accent-color:var(--accent);
     height:4px; cursor:pointer;
+    position:relative; z-index:2;
+  }
+  .slider-wrap{
+    position:relative; flex:1; min-width:0;
+    display:flex; align-items:center;
+  }
+  .day-ticks{
+    position:absolute; left:6px; right:6px; top:50%;
+    transform:translateY(-50%);
+    height:14px; pointer-events:none; z-index:1;
+  }
+  .day-tick{
+    position:absolute; top:0; width:1px; height:14px;
+    background:rgba(159,176,170,.6);
+  }
+  .day-tick span{
+    position:absolute; top:-11px; left:50%; transform:translateX(-50%);
+    font-size:8px; color:var(--paper-dim); font-family:var(--mono);
+    white-space:nowrap;
   }
   .speed-group{ display:flex; gap:4px; flex:none; }
   .speed-btn{
@@ -401,7 +420,7 @@
       flex-wrap:nowrap;
     }
     #playBtn{ width:28px; height:28px; font-size:11px; }
-    #playElapsed, #playTotal{ display:none; }
+    #playElapsed, #playTotal{ font-size:8.5px; }
     .speed-group{ gap:3px; }
     .speed-btn{ padding:3px 5px; font-size:9px; }
   }
@@ -432,13 +451,16 @@
     <div id="playbackBar">
       <button id="playBtn" aria-label="Play">▶</button>
       <span id="playElapsed">0:00</span>
-      <input type="range" id="playSlider" min="0" max="100" value="0" step="1">
+      <div class="slider-wrap">
+        <input type="range" id="playSlider" min="0" max="100" value="0" step="1">
+        <div id="dayTicks" class="day-ticks"></div>
+      </div>
       <span id="playTotal">0:00</span>
       <div class="speed-group">
         <button class="speed-btn" data-speed="1">1×</button>
-        <button class="speed-btn active" data-speed="5">5×</button>
-        <button class="speed-btn" data-speed="10">10×</button>
-        <button class="speed-btn" data-speed="50">50×</button>
+        <button class="speed-btn active" data-speed="50">50×</button>
+        <button class="speed-btn" data-speed="100">100×</button>
+        <button class="speed-btn" data-speed="200">200×</button>
       </div>
     </div>
   </main>
@@ -638,7 +660,7 @@ const MEDIA_CONFIG = {
     playing: false,
     simTime: 0,
     totalDuration: 0,
-    speed: 5,
+    speed: 50,
     segments: [],
     lastFrameTs: null
   };
@@ -1158,16 +1180,37 @@ const MEDIA_CONFIG = {
     stopPlayback();
     playState.segments = [];
     let offset = 0;
+    let prevDay = null;
+    const dayMarkers = [];
     tracks.forEach(({ t }) => {
       const dur = t.stats.duration_s || 0;
       if (dur <= 0 || !t.pts.length || t.pts[0][3] == null) return;
+      if (t.day !== prevDay){
+        dayMarkers.push({ offset, day: t.day });
+        prevDay = t.day;
+      }
       playState.segments.push({ track: t, startOffset: offset, duration: dur });
       offset += dur;
     });
     playState.totalDuration = offset;
     playState.simTime = 0;
+    renderDayTicks(dayMarkers, offset);
     updatePlaybackUI();
     document.getElementById('playBtn').disabled = playState.segments.length === 0;
+  }
+
+  function renderDayTicks(dayMarkers, totalDuration){
+    const wrap = document.getElementById('dayTicks');
+    wrap.innerHTML = '';
+    if (totalDuration <= 0 || dayMarkers.length < 2) return; // no point marking a single-day selection
+    dayMarkers.forEach(m => {
+      const pct = (m.offset / totalDuration) * 100;
+      const tick = document.createElement('div');
+      tick.className = 'day-tick';
+      tick.style.left = pct + '%';
+      tick.innerHTML = `<span>D${m.day.replace('day','')}</span>`;
+      wrap.appendChild(tick);
+    });
   }
 
   function getPositionAtSimTime(simTime){
@@ -1200,12 +1243,26 @@ const MEDIA_CONFIG = {
     }
   }
 
+  function dayTimeAt(simTime){
+    const seg = playState.segments.find(s => simTime >= s.startOffset && simTime <= s.startOffset + s.duration)
+                || playState.segments[playState.segments.length - 1];
+    if (!seg) return '—';
+    const localT = Math.min(Math.max(simTime - seg.startOffset, 0), seg.duration);
+    const startUtcMs = new Date(seg.track.stats.start_time).getTime();
+    const localMs = startUtcMs + localT*1000 + 2*3600*1000; // shift to local (UTC+2)
+    const d = new Date(localMs);
+    const hh = String(d.getUTCHours()).padStart(2,'0');
+    const mm = String(d.getUTCMinutes()).padStart(2,'0');
+    const dayNum = seg.track.day.replace('day','');
+    return `Day ${dayNum} · ${hh}:${mm}`;
+  }
+
   function updatePlaybackUI(){
     const slider = document.getElementById('playSlider');
     slider.max = Math.max(1, Math.round(playState.totalDuration));
     slider.value = Math.round(playState.simTime);
-    document.getElementById('playElapsed').textContent = fmtElapsed(playState.simTime);
-    document.getElementById('playTotal').textContent = fmtElapsed(playState.totalDuration);
+    document.getElementById('playElapsed').textContent = dayTimeAt(playState.simTime);
+    document.getElementById('playTotal').textContent = dayTimeAt(playState.totalDuration);
     document.getElementById('playBtn').textContent = playState.playing ? '❙❙' : '▶';
   }
 
