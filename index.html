@@ -722,6 +722,9 @@ const MEDIA_CONFIG = {
 
   let vSpeedUnit = 'ms'; // 'ms' or 'mh'
   let lastChartTracks = null;
+  let chartPointOffsets = []; // [{order, startIdx, count}] aligned to current chart's flat point array
+  let currentPlayheadIndex = -1;
+  let lastPlayheadChartUpdate = 0;
 
   function renderChartForTracks(tracks, highlightIdx){
     lastChartTracks = tracks;
@@ -732,8 +735,11 @@ const MEDIA_CONFIG = {
     const dataPoints = [];
     const vSpeedRaw = []; // always m/s, converted at render time
     const pointMeta = []; // {idx, lat, lon, type, tOffset, vSpeed, hSpeed}
+    chartPointOffsets = [];
+    currentPlayheadIndex = -1;
 
     tracks.forEach(({t, idx}) => {
+      chartPointOffsets.push({ order: t.order, startIdx: dataPoints.length, count: t.pts.length });
       const cum = cumulativeDistances(t.pts.map(p=>[p[0],p[1]]));
       t.pts.forEach((p, i) => {
         const distKm = offset + cum[i];
@@ -779,7 +785,11 @@ const MEDIA_CONFIG = {
             borderColor: '#f2a341',
             backgroundColor: 'rgba(242,163,65,0.15)',
             fill: true,
-            pointRadius: 0,
+            pointRadius: (ctx) => ctx.dataIndex === currentPlayheadIndex ? 6 : 0,
+            pointHoverRadius: (ctx) => ctx.dataIndex === currentPlayheadIndex ? 6 : 3,
+            pointBackgroundColor: '#ffffff',
+            pointBorderColor: '#f2a341',
+            pointBorderWidth: 2,
             borderWidth: 1.5,
             tension: 0.15,
             yAxisID: 'y',
@@ -1228,7 +1238,25 @@ const MEDIA_CONFIG = {
     const lat = a[0] + (b[0]-a[0])*frac;
     const lon = a[1] + (b[1]-a[1])*frac;
     const ele = a[2] + (b[2]-a[2])*frac;
-    return { lat, lon, ele, type: seg.track.type, seg };
+    return { lat, lon, ele, type: seg.track.type, seg, trackOrder: seg.track.order, ptIndex: i };
+  }
+
+  function updateChartPlayhead(trackOrder, ptIndex){
+    if (!chart) return;
+    const off = chartPointOffsets.find(o => o.order === trackOrder);
+    if (!off) return;
+    const flatIndex = off.startIdx + Math.min(ptIndex, off.count - 1);
+    if (flatIndex === currentPlayheadIndex) return;
+    currentPlayheadIndex = flatIndex;
+    chart.setActiveElements([
+      { datasetIndex: 0, index: flatIndex },
+      { datasetIndex: 1, index: flatIndex }
+    ]);
+    if (chart.tooltip) chart.tooltip.setActiveElements([
+      { datasetIndex: 0, index: flatIndex },
+      { datasetIndex: 1, index: flatIndex }
+    ], { x: 0, y: 0 });
+    chart.update('none');
   }
 
   function ensurePlayMarker(type){
@@ -1274,6 +1302,11 @@ const MEDIA_CONFIG = {
       playMarker.setLatLng([pos.lat, pos.lon]);
       if (!map.getBounds().contains([pos.lat, pos.lon])){
         map.panTo([pos.lat, pos.lon]);
+      }
+      const now = performance.now();
+      if (!playState.playing || now - lastPlayheadChartUpdate > 120){
+        updateChartPlayhead(pos.trackOrder, pos.ptIndex);
+        lastPlayheadChartUpdate = now;
       }
     }
     updatePlaybackUI();
