@@ -263,53 +263,107 @@
   #playbackBar{
     position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
     z-index:1200;
-    display:flex; align-items:center; gap:10px;
-    background:rgba(20,27,25,.92);
+    display:flex; flex-direction:column; gap:6px;
+    background:rgba(20,27,25,.94);
     border:1px solid var(--line);
-    border-radius:10px;
-    padding:8px 14px;
-    width:min(560px, 90%);
+    border-radius:12px;
+    padding:10px 18px 12px;
+    width:min(820px, 96%);
     box-shadow:0 4px 18px rgba(0,0,0,.45);
     backdrop-filter: blur(4px);
   }
+  .playback-row-top{
+    display:flex; align-items:center; gap:12px; width:100%;
+  }
+  .playback-row-bottom{
+    display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%;
+  }
+  .transport-group{ display:flex; align-items:center; gap:8px; flex:none; }
   #playBtn{
-    flex:none; width:32px; height:32px; border-radius:50%;
+    flex:none; width:36px; height:36px; border-radius:50%;
     background:var(--accent); color:#1a1200; border:none;
+    font-size:14px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .step-btn{
+    flex:none; width:30px; height:30px; border-radius:50%;
+    background:var(--panel-2); color:var(--paper); border:1px solid var(--line);
     font-size:13px; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
   }
+  .step-btn:hover{ border-color:var(--accent); color:var(--accent); }
   #playElapsed, #playTotal{
-    font-family:var(--mono); font-size:10.5px; color:var(--paper-dim); flex:none;
+    font-family:var(--mono); font-size:11px; color:var(--paper-dim); flex:none;
+    width:78px;
   }
-  #playSlider{
-    flex:1; min-width:0; accent-color:var(--accent);
-    height:4px; cursor:pointer;
-    position:relative; z-index:2;
-  }
+  #playTotal{ text-align:right; }
+
   .slider-wrap{
     position:relative; flex:1; min-width:0;
     display:flex; align-items:center;
+    height:26px;
+  }
+  #playSlider{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height:26px; margin:0;
+    background:transparent; cursor:pointer;
+    position:relative; z-index:2;
+  }
+  #playSlider::-webkit-slider-runnable-track{
+    height:9px; border-radius:5px;
+    background:var(--panel-2); border:1px solid var(--line);
+  }
+  #playSlider::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:20px; height:20px; margin-top:-6px;
+    border-radius:50%; background:var(--accent); border:3px solid #fff;
+    box-shadow:0 1px 5px rgba(0,0,0,.5); cursor:pointer;
+  }
+  #playSlider::-moz-range-track{
+    height:9px; border-radius:5px;
+    background:var(--panel-2); border:1px solid var(--line);
+  }
+  #playSlider::-moz-range-thumb{
+    width:20px; height:20px; border-radius:50%;
+    background:var(--accent); border:3px solid #fff;
+    box-shadow:0 1px 5px rgba(0,0,0,.5); cursor:pointer;
   }
   .day-ticks{
-    position:absolute; left:6px; right:6px; top:50%;
+    position:absolute; left:2px; right:2px; top:50%;
     transform:translateY(-50%);
-    height:14px; pointer-events:none; z-index:1;
+    height:20px; pointer-events:none; z-index:1;
   }
   .day-tick{
-    position:absolute; top:0; width:1px; height:14px;
+    position:absolute; top:0; width:1px; height:20px;
     background:rgba(159,176,170,.6);
   }
   .day-tick span{
-    position:absolute; top:-11px; left:50%; transform:translateX(-50%);
-    font-size:8px; color:var(--paper-dim); font-family:var(--mono);
+    position:absolute; top:-13px; left:50%; transform:translateX(-50%);
+    font-size:8.5px; color:var(--paper-dim); font-family:var(--mono);
     white-space:nowrap;
   }
+  .seek-tooltip{
+    display:none;
+    position:absolute; bottom:30px; left:0;
+    transform:translateX(-50%);
+    background:var(--panel-2); color:var(--paper);
+    border:1px solid var(--accent); border-radius:6px;
+    padding:4px 9px; font-family:var(--mono); font-size:11.5px;
+    white-space:nowrap; pointer-events:none; z-index:3;
+    box-shadow:0 2px 8px rgba(0,0,0,.5);
+  }
+  .seek-tooltip.show{ display:block; }
+  .seek-tooltip::after{
+    content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+    border:5px solid transparent; border-top-color:var(--accent);
+  }
+
   .speed-group{ display:flex; gap:4px; flex:none; }
   .speed-btn{
     font-family:var(--mono); font-size:10px;
     background:var(--panel-2); color:var(--paper-dim);
     border:1px solid var(--line); border-radius:4px;
-    padding:3px 6px; cursor:pointer;
+    padding:4px 8px; cursor:pointer;
   }
   .speed-btn.active{ background:var(--accent); color:#1a1200; border-color:var(--accent); font-weight:700; }
   .speed-btn:hover:not(.active){ border-color:var(--accent); color:var(--accent); }
@@ -416,13 +470,14 @@
     #lbCaption{ font-size:11.5px; padding-bottom: env(safe-area-inset-bottom, 0px); }
 
     #playbackBar{
-      width:94%; padding:6px 10px; gap:6px; bottom:10px;
-      flex-wrap:nowrap;
+      width:94%; padding:8px 12px 10px; gap:5px; bottom:10px;
     }
-    #playBtn{ width:28px; height:28px; font-size:11px; }
-    #playElapsed, #playTotal{ font-size:8.5px; }
+    #playBtn{ width:32px; height:32px; font-size:12px; }
+    .step-btn{ width:26px; height:26px; font-size:11px; }
+    #playElapsed, #playTotal{ font-size:9px; width:56px; }
     .speed-group{ gap:3px; }
     .speed-btn{ padding:3px 5px; font-size:9px; }
+    .seek-tooltip{ font-size:10.5px; padding:3px 7px; }
   }
 </style>
 </head>
@@ -449,18 +504,27 @@
     <div id="sidebar"></div>
     <div id="map"></div>
     <div id="playbackBar">
-      <button id="playBtn" aria-label="Play">▶</button>
-      <span id="playElapsed">0:00</span>
-      <div class="slider-wrap">
-        <input type="range" id="playSlider" min="0" max="100" value="0" step="1">
-        <div id="dayTicks" class="day-ticks"></div>
+      <div class="playback-row-top">
+        <span id="playElapsed">0:00</span>
+        <div class="slider-wrap">
+          <input type="range" id="playSlider" min="0" max="100" value="0" step="1">
+          <div id="dayTicks" class="day-ticks"></div>
+          <div id="seekTooltip" class="seek-tooltip"></div>
+        </div>
+        <span id="playTotal">0:00</span>
       </div>
-      <span id="playTotal">0:00</span>
-      <div class="speed-group">
-        <button class="speed-btn" data-speed="1">1×</button>
-        <button class="speed-btn active" data-speed="50">50×</button>
-        <button class="speed-btn" data-speed="100">100×</button>
-        <button class="speed-btn" data-speed="200">200×</button>
+      <div class="playback-row-bottom">
+        <div class="transport-group">
+          <button id="stepBackBtn" class="step-btn" aria-label="Step back">⏮</button>
+          <button id="playBtn" aria-label="Play">▶</button>
+          <button id="stepFwdBtn" class="step-btn" aria-label="Step forward">⏭</button>
+        </div>
+        <div class="speed-group">
+          <button class="speed-btn" data-speed="1">1×</button>
+          <button class="speed-btn active" data-speed="50">50×</button>
+          <button class="speed-btn" data-speed="100">100×</button>
+          <button class="speed-btn" data-speed="200">200×</button>
+        </div>
       </div>
     </div>
   </main>
@@ -1342,10 +1406,58 @@ const MEDIA_CONFIG = {
     playState.lastFrameTs = null;
     updatePlaybackUI();
   });
-  document.getElementById('playSlider').addEventListener('input', (e) => {
+
+  const playSliderEl = document.getElementById('playSlider');
+  const seekTooltipEl = document.getElementById('seekTooltip');
+
+  function updateSeekTooltip(){
+    const max = parseFloat(playSliderEl.max) || 1;
+    const val = parseFloat(playSliderEl.value) || 0;
+    const frac = max > 0 ? val / max : 0;
+    const rect = playSliderEl.getBoundingClientRect();
+    seekTooltipEl.style.left = (frac * rect.width) + 'px';
+    seekTooltipEl.textContent = dayTimeAt(val);
+  }
+
+  playSliderEl.addEventListener('pointerdown', () => {
+    seekTooltipEl.classList.add('show');
+    updateSeekTooltip();
+  });
+  playSliderEl.addEventListener('input', (e) => {
     playState.playing = false;
     seekTo(parseFloat(e.target.value));
+    updateSeekTooltip();
   });
+  ['pointerup','pointercancel'].forEach(evt => {
+    playSliderEl.addEventListener(evt, () => seekTooltipEl.classList.remove('show'));
+  });
+  window.addEventListener('pointerup', () => seekTooltipEl.classList.remove('show'));
+
+  // step back/forward buttons — single click nudges, press-and-hold repeats
+  const STEP_SECONDS = 30;
+  function stepBy(delta){
+    if (playState.segments.length === 0) return;
+    playState.playing = false;
+    seekTo(playState.simTime + delta);
+  }
+  function wireHoldButton(btn, delta){
+    let holdTimeout = null, holdInterval = null;
+    const start = () => {
+      stepBy(delta);
+      holdTimeout = setTimeout(() => {
+        holdInterval = setInterval(() => stepBy(delta), 130);
+      }, 400);
+    };
+    const stop = () => {
+      clearTimeout(holdTimeout); clearInterval(holdInterval);
+      holdTimeout = null; holdInterval = null;
+    };
+    btn.addEventListener('pointerdown', start);
+    ['pointerup','pointerleave','pointercancel'].forEach(evt => btn.addEventListener(evt, stop));
+  }
+  wireHoldButton(document.getElementById('stepBackBtn'), -STEP_SECONDS);
+  wireHoldButton(document.getElementById('stepFwdBtn'), STEP_SECONDS);
+
   document.querySelectorAll('.speed-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       playState.speed = parseFloat(btn.dataset.speed);
