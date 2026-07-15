@@ -253,6 +253,46 @@
     font-size:13px; box-shadow:0 1px 4px rgba(0,0,0,.5);
     cursor:pointer;
   }
+  .play-marker{
+    width:16px; height:16px; border-radius:50%;
+    border:3px solid #fff; box-shadow:0 0 0 3px rgba(0,0,0,.35), 0 1px 6px rgba(0,0,0,.6);
+  }
+
+  /* ---------- PLAYBACK BAR ---------- */
+  #playbackBar{
+    position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
+    z-index:15;
+    display:flex; align-items:center; gap:10px;
+    background:rgba(20,27,25,.92);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:8px 14px;
+    width:min(560px, 90%);
+    box-shadow:0 4px 18px rgba(0,0,0,.45);
+    backdrop-filter: blur(4px);
+  }
+  #playBtn{
+    flex:none; width:32px; height:32px; border-radius:50%;
+    background:var(--accent); color:#1a1200; border:none;
+    font-size:13px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #playElapsed, #playTotal{
+    font-family:var(--mono); font-size:10.5px; color:var(--paper-dim); flex:none;
+  }
+  #playSlider{
+    flex:1; min-width:0; accent-color:var(--accent);
+    height:4px; cursor:pointer;
+  }
+  .speed-group{ display:flex; gap:4px; flex:none; }
+  .speed-btn{
+    font-family:var(--mono); font-size:10px;
+    background:var(--panel-2); color:var(--paper-dim);
+    border:1px solid var(--line); border-radius:4px;
+    padding:3px 6px; cursor:pointer;
+  }
+  .speed-btn.active{ background:var(--accent); color:#1a1200; border-color:var(--accent); font-weight:700; }
+  .speed-btn:hover:not(.active){ border-color:var(--accent); color:var(--accent); }
 
   /* ---------- LIGHTBOX ---------- */
   #lightbox{
@@ -354,6 +394,15 @@
     #lbPrev{ left:8px; }
     #lbNext{ right:8px; }
     #lbCaption{ font-size:11.5px; padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+    #playbackBar{
+      width:94%; padding:6px 10px; gap:6px; bottom:10px;
+      flex-wrap:nowrap;
+    }
+    #playBtn{ width:28px; height:28px; font-size:11px; }
+    #playElapsed, #playTotal{ display:none; }
+    .speed-group{ gap:3px; }
+    .speed-btn{ padding:3px 5px; font-size:9px; }
   }
 </style>
 </head>
@@ -379,6 +428,18 @@
     <div id="sidebarBackdrop"></div>
     <div id="sidebar"></div>
     <div id="map"></div>
+    <div id="playbackBar">
+      <button id="playBtn" aria-label="Play">▶</button>
+      <span id="playElapsed">0:00</span>
+      <input type="range" id="playSlider" min="0" max="100" value="0" step="1">
+      <span id="playTotal">0:00</span>
+      <div class="speed-group">
+        <button class="speed-btn" data-speed="1">1×</button>
+        <button class="speed-btn active" data-speed="5">5×</button>
+        <button class="speed-btn" data-speed="10">10×</button>
+        <button class="speed-btn" data-speed="50">50×</button>
+      </div>
+    </div>
   </main>
 
   <footer id="footerPanel">
@@ -571,6 +632,17 @@ const MEDIA_CONFIG = {
   let chart = null;
   let currentIdx = null;
 
+  // playback state (declared early — buildPlaybackTimeline runs during initial showFullRoute())
+  const playState = {
+    playing: false,
+    simTime: 0,
+    totalDuration: 0,
+    speed: 5,
+    segments: [],
+    lastFrameTs: null
+  };
+  let playMarker = null;
+
   function fmtDuration(sec){
     if (sec == null) return '—';
     const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
@@ -630,6 +702,7 @@ const MEDIA_CONFIG = {
 
   function renderChartForTracks(tracks, highlightIdx){
     lastChartTracks = tracks;
+    buildPlaybackTimeline(tracks);
     // concatenate distance across tracks (for multi-track / day / full view)
     let offset = 0;
     const labels = [];
@@ -1077,6 +1150,116 @@ const MEDIA_CONFIG = {
     if (items.length){
       console.info(`Media: loaded ${items.length} photo/video marker(s).`);
     }
+  });
+
+  // ---------- Playback: replay the selected track(s) at real recorded pace ----------
+  function buildPlaybackTimeline(tracks){
+    stopPlayback();
+    playState.segments = [];
+    let offset = 0;
+    tracks.forEach(({ t }) => {
+      const dur = t.stats.duration_s || 0;
+      if (dur <= 0 || !t.pts.length || t.pts[0][3] == null) return;
+      playState.segments.push({ track: t, startOffset: offset, duration: dur });
+      offset += dur;
+    });
+    playState.totalDuration = offset;
+    playState.simTime = 0;
+    updatePlaybackUI();
+    document.getElementById('playBtn').disabled = playState.segments.length === 0;
+  }
+
+  function getPositionAtSimTime(simTime){
+    const seg = playState.segments.find(s => simTime >= s.startOffset && simTime <= s.startOffset + s.duration)
+                || playState.segments[playState.segments.length - 1];
+    if (!seg) return null;
+    const localT = Math.min(Math.max(simTime - seg.startOffset, 0), seg.duration);
+    const pts = seg.track.pts;
+    let i = 0;
+    while (i < pts.length - 1 && pts[i+1][3] <= localT) i++;
+    const a = pts[i];
+    const b = pts[Math.min(i+1, pts.length-1)];
+    let frac = 0;
+    if (b[3] > a[3]) frac = (localT - a[3]) / (b[3] - a[3]);
+    const lat = a[0] + (b[0]-a[0])*frac;
+    const lon = a[1] + (b[1]-a[1])*frac;
+    const ele = a[2] + (b[2]-a[2])*frac;
+    return { lat, lon, ele, type: seg.track.type, seg };
+  }
+
+  function ensurePlayMarker(type){
+    const color = type === 'hiking' ? '#22c55e' : '#3355ff';
+    if (!playMarker){
+      playMarker = L.marker([0,0], {
+        icon: L.divIcon({ className:'', html:`<div class="play-marker" style="background:${color}"></div>`, iconSize:[16,16], iconAnchor:[8,8] }),
+        zIndexOffset: 1000
+      }).addTo(map);
+    } else {
+      playMarker.setIcon(L.divIcon({ className:'', html:`<div class="play-marker" style="background:${color}"></div>`, iconSize:[16,16], iconAnchor:[8,8] }));
+    }
+  }
+
+  function updatePlaybackUI(){
+    const slider = document.getElementById('playSlider');
+    slider.max = Math.max(1, Math.round(playState.totalDuration));
+    slider.value = Math.round(playState.simTime);
+    document.getElementById('playElapsed').textContent = fmtElapsed(playState.simTime);
+    document.getElementById('playTotal').textContent = fmtElapsed(playState.totalDuration);
+    document.getElementById('playBtn').textContent = playState.playing ? '❙❙' : '▶';
+  }
+
+  function seekTo(simTime){
+    playState.simTime = Math.min(Math.max(simTime, 0), playState.totalDuration);
+    const pos = getPositionAtSimTime(playState.simTime);
+    if (pos){
+      ensurePlayMarker(pos.type);
+      playMarker.setLatLng([pos.lat, pos.lon]);
+      if (!map.getBounds().contains([pos.lat, pos.lon])){
+        map.panTo([pos.lat, pos.lon]);
+      }
+    }
+    updatePlaybackUI();
+  }
+
+  function stopPlayback(){
+    playState.playing = false;
+    playState.lastFrameTs = null;
+    updatePlaybackUI();
+  }
+
+  function playbackTick(ts){
+    if (playState.playing){
+      if (playState.lastFrameTs != null){
+        const deltaReal = (ts - playState.lastFrameTs) / 1000;
+        playState.simTime += deltaReal * playState.speed;
+        if (playState.simTime >= playState.totalDuration){
+          playState.simTime = playState.totalDuration;
+          playState.playing = false;
+        }
+      }
+      playState.lastFrameTs = ts;
+      seekTo(playState.simTime);
+    }
+    requestAnimationFrame(playbackTick);
+  }
+  requestAnimationFrame(playbackTick);
+
+  document.getElementById('playBtn').addEventListener('click', () => {
+    if (playState.segments.length === 0) return;
+    if (!playState.playing && playState.simTime >= playState.totalDuration) playState.simTime = 0;
+    playState.playing = !playState.playing;
+    playState.lastFrameTs = null;
+    updatePlaybackUI();
+  });
+  document.getElementById('playSlider').addEventListener('input', (e) => {
+    playState.playing = false;
+    seekTo(parseFloat(e.target.value));
+  });
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      playState.speed = parseFloat(btn.dataset.speed);
+      document.querySelectorAll('.speed-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
   });
 
   const totalDistAll = TRACKS.reduce((s,t)=>s+t.stats.distance_km,0);
